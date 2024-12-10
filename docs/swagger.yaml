@@ -1,0 +1,647 @@
+basePath: /
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API for capturing and managing webhook requests and callbacks
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Reqi API
+  version: "1.0"
+paths:
+  /api/log:
+    post:
+      consumes:
+      - application/json
+      description: Legacy endpoint for logging requests (use HandleLog instead)
+      parameters:
+      - description: Log details
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            body:
+              type: string
+            uuid:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              log:
+                type: object
+              message:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Log a request (Deprecated)
+      tags:
+      - logs
+  /api/log/{logger_uuid}/{request_uuid}:
+    get:
+      description: Get detailed information about a specific logged request
+      parameters:
+      - description: Logger UUID
+        in: path
+        name: logger_uuid
+        required: true
+        type: string
+      - description: Request UUID
+        in: path
+        name: request_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              body:
+                type: object
+              created_at:
+                type: string
+              headers:
+                type: object
+              method:
+                type: string
+              path:
+                type: string
+              query:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get log details
+      tags:
+      - logs
+  /api/logger:
+    post:
+      consumes:
+      - application/json
+      description: Create a new logger for capturing requests
+      parameters:
+      - description: Logger creation details
+        in: body
+        name: logger
+        required: true
+        schema:
+          properties:
+            is_public:
+              type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              logger:
+                properties:
+                  is_public:
+                    type: boolean
+                  url:
+                    type: string
+                  uuid:
+                    type: string
+                type: object
+              message:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create a new logger
+      tags:
+      - loggers
+  /api/loggers:
+    get:
+      description: Get a list of all loggers for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of loggers
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List all loggers
+      tags:
+      - loggers
+  /api/logs/{uuid}:
+    get:
+      description: Get a list of all captured requests for a specific logger
+      parameters:
+      - description: Logger UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              logs:
+                items:
+                  properties:
+                    created_at:
+                      type: string
+                    id:
+                      type: string
+                    method:
+                      type: string
+                    path:
+                      type: string
+                  type: object
+                type: array
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Show all logs for a logger
+      tags:
+      - logs
+  /api/register:
+    post:
+      consumes:
+      - application/json
+      description: Create a new API key for the authenticated user
+      parameters:
+      - description: API key creation details
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            is_public:
+              type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              api_key:
+                properties:
+                  api_key:
+                    type: string
+                  created_at:
+                    type: string
+                  id:
+                    type: string
+                  is_public:
+                    type: boolean
+                  updated_at:
+                    type: string
+                  user_id:
+                    type: string
+                type: object
+              message:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Register a new API key
+      tags:
+      - api-keys
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user and return JWT token
+      parameters:
+      - description: Login credentials
+        in: body
+        name: credentials
+        required: true
+        schema:
+          properties:
+            email:
+              type: string
+            password:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              message:
+                type: string
+              token:
+                type: string
+              user:
+                properties:
+                  email:
+                    type: string
+                  id:
+                    type: string
+                type: object
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      summary: Login user
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user with email and password
+      parameters:
+      - description: User registration details
+        in: body
+        name: user
+        required: true
+        schema:
+          properties:
+            email:
+              type: string
+            password:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              message:
+                type: string
+              user:
+                properties:
+                  created_at:
+                    type: string
+                  email:
+                    type: string
+                  id:
+                    type: string
+                  updated_at:
+                    type: string
+                type: object
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      summary: Register a new user
+      tags:
+      - auth
+  /keys/{key}:
+    delete:
+      description: Deactivate an existing API key
+      parameters:
+      - description: API key to revoke
+        in: path
+        name: key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              message:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Revoke an API key
+      tags:
+      - api-keys
+  /keys/create:
+    post:
+      consumes:
+      - application/json
+      description: Create a new named API key for the authenticated user
+      parameters:
+      - description: API key creation details
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            is_public:
+              type: boolean
+            name:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              api_key:
+                properties:
+                  api_key:
+                    type: string
+                  id:
+                    type: string
+                  is_active:
+                    type: boolean
+                  is_public:
+                    type: boolean
+                  name:
+                    type: string
+                type: object
+              message:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a new API key
+      tags:
+      - api-keys
+  /keys/list:
+    get:
+      description: Get a list of all API keys for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              items:
+                properties:
+                  api_key:
+                    type: string
+                  created_at:
+                    type: string
+                  id:
+                    type: string
+                  is_active:
+                    type: boolean
+                  is_public:
+                    type: boolean
+                  name:
+                    type: string
+                type: object
+              type: array
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List all API keys
+      tags:
+      - api-keys
+  /log/{uuid}/{path}:
+    post:
+      consumes:
+      - application/json
+      description: Capture and store details of incoming request
+      parameters:
+      - description: Logger UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Capture path
+        in: path
+        name: path
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              message:
+                type: string
+              request:
+                properties:
+                  body:
+                    type: object
+                  headers:
+                    type: object
+                  id:
+                    type: string
+                  method:
+                    type: string
+                  path:
+                    type: string
+                  timestamp:
+                    type: string
+                type: object
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      summary: Capture incoming request
+      tags:
+      - logs
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: X-API-Key
+    type: apiKey
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
