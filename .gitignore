@@ -1,1 +1,6 @@
 .env
+go.sum
+migrate
+sqldev - reqi.session.sql
+.vscode/launch.json
+.vscode/settings.json
