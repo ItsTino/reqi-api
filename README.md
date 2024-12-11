@@ -1,6 +1,6 @@
-# Reqi - Webhook Request Inspector & Logger
+# Reqi - Request Inspector & Logger
 
-Debug webhooks and callbacks with ease
+Debug notifications, API's and callbacks with ease
 
 ## Features
 
@@ -16,10 +16,10 @@ Debug webhooks and callbacks with ease
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/reqi.git
+git clone https://github.com/ItsTino/reqi-api.git
 
 # Install dependencies
-cd reqi
+cd reqi-api
 go mod download
 
 # Set up environment variables
@@ -123,9 +123,7 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
-
-- Thanks to all contributors who have helped shape Reqi
 - Built with [Go](https://golang.org/) and [Gin](https://gin-gonic.com/)
 
 ---
-Built with ❤️ for developers who debug webhooks
+Built with ❤️ for developers
