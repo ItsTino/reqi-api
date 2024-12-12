@@ -4,3 +4,4 @@ migrate
 sqldev - reqi.session.sql
 .vscode/launch.json
 .vscode/settings.json
+dev/test.sh
