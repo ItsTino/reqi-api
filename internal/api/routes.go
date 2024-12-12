@@ -51,6 +51,7 @@ func SetupRouter(db *sql.DB) *gin.Engine {
 		api.GET("/logger/:logger_uuid/repeaters", h.ListRepeaters)  //List all repeaters
 		api.DELETE("/repeater/:id", h.DeleteRepeater)               //Delete configured repeater
 		api.PUT("/repeater/:id", h.UpdateRepeater)                  //Update repeater configuration
+		api.POST("/search/logs", h.SearchLogs)                      //Search logs
 	}
 
 	// Public logging endpoint (no auth required for public loggers)
