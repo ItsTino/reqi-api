@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"reqi-api/internal/constants"
 	"reqi-api/internal/models"
 	"reqi-api/internal/utils"
 	"strings"
@@ -17,65 +18,76 @@ import (
 )
 
 func (h *Handler) forwardRequest(repeater models.Repeater, originalReq *http.Request, logID string) {
-	// Create new request
-	body, err := io.ReadAll(originalReq.Body)
-	if err != nil {
-		log.Printf("Error reading request body for forwarding: %v", err)
-		return
-	}
-	originalReq.Body = io.NopCloser(bytes.NewBuffer(body))
+    // Check rate limit first
+    allowed, _, err := h.rateLimiter.Allow("global:repeater", constants.GlobalRepeaterLimit, time.Minute)
+    if err != nil {
+        log.Printf("Rate limit check failed for repeater: %v", err)
+        return
+    }
+    if !allowed {
+        log.Printf("Rate limit exceeded for repeater")
+        return
+    }
 
-	// Create forwarding request
-	req, err := http.NewRequest(
-		originalReq.Method,
-		repeater.ForwardURL,
-		bytes.NewBuffer(body),
-	)
-	if err != nil {
-		log.Printf("Error creating forward request: %v", err)
-		return
-	}
+    // Create new request
+    body, err := io.ReadAll(originalReq.Body)
+    if err != nil {
+        log.Printf("Error reading request body for forwarding: %v", err)
+        return
+    }
+    originalReq.Body = io.NopCloser(bytes.NewBuffer(body))
 
-	// Copy headers
-	for key, values := range originalReq.Header {
-		if key != "Host" || repeater.PreserveHost {
-			for _, value := range values {
-				req.Header.Add(key, value)
-			}
-		}
-	}
+    // Create forwarding request
+    req, err := http.NewRequest(
+        originalReq.Method,
+        repeater.ForwardURL,
+        bytes.NewBuffer(body),
+    )
+    if err != nil {
+        log.Printf("Error creating forward request: %v", err)
+        return
+    }
 
-	// Add custom headers
-	req.Header.Set("X-Reqi-Request-ID", logID)
-	req.Header.Set("X-Reqi-Forwarded", "true")
+    // Copy headers
+    for key, values := range originalReq.Header {
+        if key != "Host" || repeater.PreserveHost {
+            for _, value := range values {
+                req.Header.Add(key, value)
+            }
+        }
+    }
 
-	// Create client with timeout
-	client := &http.Client{
-		Timeout: time.Duration(repeater.Timeout) * time.Second,
-	}
+    // Add custom headers
+    req.Header.Set("X-Reqi-Request-ID", logID)
+    req.Header.Set("X-Reqi-Forwarded", "true")
 
-	// Attempt forwarding with retries
-	var lastErr error
-	for i := 0; i <= repeater.RetryCount; i++ {
-		resp, err := client.Do(req)
-		if err != nil {
-			lastErr = err
-			time.Sleep(time.Second * time.Duration(i+1)) // Exponential backoff
-			continue
-		}
-		resp.Body.Close()
+    // Create client with timeout
+    client := &http.Client{
+        Timeout: time.Duration(repeater.Timeout) * time.Second,
+    }
 
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			log.Printf("Successfully forwarded request to %s", repeater.ForwardURL)
-			return
-		}
+    // Attempt forwarding with retries
+    var lastErr error
+    for i := 0; i <= repeater.RetryCount; i++ {
+        resp, err := client.Do(req)
+        if err != nil {
+            lastErr = err
+            time.Sleep(time.Second * time.Duration(i+1)) // Exponential backoff
+            continue
+        }
+        resp.Body.Close()
+        
+        if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+            log.Printf("Successfully forwarded request to %s", repeater.ForwardURL)
+            return
+        }
+        
+        lastErr = fmt.Errorf("received status code: %d", resp.StatusCode)
+        time.Sleep(time.Second * time.Duration(i+1))
+    }
 
-		lastErr = fmt.Errorf("received status code: %d", resp.StatusCode)
-		time.Sleep(time.Second * time.Duration(i+1))
-	}
-
-	log.Printf("Failed to forward request after %d attempts: %v",
-		repeater.RetryCount+1, lastErr)
+    log.Printf("Failed to forward request after %d attempts: %v", 
+        repeater.RetryCount+1, lastErr)
 }
 
 // Log godoc

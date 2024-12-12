@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"reqi-api/internal/crypto"
+	"reqi-api/internal/ratelimit"
 	"sync"
 )
 
@@ -12,12 +13,14 @@ type Handler struct {
 	db         *sql.DB
 	encryptors map[string]*crypto.Encryptor // Cache of user encryptors
 	mu         sync.RWMutex                 // Mutex for encryptors map
+	rateLimiter *ratelimit.RateLimiter
 }
 
-func NewHandler(db *sql.DB) *Handler {
+func NewHandler(db *sql.DB, rateLimiter *ratelimit.RateLimiter) *Handler {
 	return &Handler{
 		db:         db,
 		encryptors: make(map[string]*crypto.Encryptor),
+		rateLimiter: rateLimiter,
 	}
 }
 

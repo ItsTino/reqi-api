@@ -9,10 +9,12 @@ import (
 )
 
 type Config struct {
+    Redis RedisConfig
     Database DatabaseConfig
     Server   ServerConfig
     JWT      JWTConfig
     Env      string
+    
 }
 
 type DatabaseConfig struct {
@@ -21,6 +23,10 @@ type DatabaseConfig struct {
     User     string
     Password string
     DBName   string
+}
+
+type RedisConfig struct {
+    URL      string
 }
 
 type ServerConfig struct {
@@ -38,6 +44,7 @@ func LoadConfig() (*Config, error) {
     }
 
     config := &Config{
+        
         Database: DatabaseConfig{
             Host:     getEnv("DB_HOST", "localhost"),
             Port:     getEnv("DB_PORT", "3306"),
@@ -52,6 +59,10 @@ func LoadConfig() (*Config, error) {
             Secret: getEnv("JWT_SECRET", "your-default-secret-key"),
         },
         Env: getEnv("ENVIRONMENT", "development"),
+
+        Redis: RedisConfig{
+            URL: getEnv("REDIS_URL", "redis://localhost:6379/0"),
+        },
     }
 
     return config, nil

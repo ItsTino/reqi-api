@@ -10,6 +10,7 @@ import (
 	"reqi-api/internal/api"
 	"reqi-api/internal/auth"
 	"reqi-api/internal/config"
+	"reqi-api/internal/ratelimit"
 	"reqi-api/internal/storage"
 )
 
@@ -100,10 +101,16 @@ func main() {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	// Set up and start the server
-	router := api.SetupRouter(db)
+	rateLimiter, err := ratelimit.NewRateLimiter(cfg.Redis.URL)
+    if err != nil {
+        log.Fatalf("Failed to initialize rate limiter: %v", err)
+    }
+    defer rateLimiter.Close()
 
-	serverAddr := fmt.Sprintf(":%s", cfg.Server.Port)
+	// Set up and start the server
+	router := api.SetupRouter(db, rateLimiter)
+
+serverAddr := fmt.Sprintf(":%s", cfg.Server.Port)
 	if cfg.Env == "development" {
 		log.Printf("Server starting on http://localhost%s", serverAddr)
 		log.Printf("Swagger UI available at http://localhost%s/swagger/index.html", serverAddr)
