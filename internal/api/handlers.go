@@ -3,16 +3,20 @@ package api
 
 import (
 	"bytes"
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"reqi-api/internal/auth"
+	"reqi-api/internal/crypto"
 	"reqi-api/internal/models"
 	"reqi-api/internal/utils"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,11 +24,56 @@ import (
 )
 
 type Handler struct {
-	db *sql.DB
+	db         *sql.DB
+	encryptors map[string]*crypto.Encryptor // Cache of user encryptors
+	mu         sync.RWMutex                 // Mutex for encryptors map
 }
 
 func NewHandler(db *sql.DB) *Handler {
-	return &Handler{db: db}
+	return &Handler{
+		db:         db,
+		encryptors: make(map[string]*crypto.Encryptor),
+	}
+}
+
+// internal/api/handlers.go
+func (h *Handler) getEncryptor(userID string) (*crypto.Encryptor, error) {
+	h.mu.RLock()
+	enc, exists := h.encryptors[userID]
+	h.mu.RUnlock()
+
+	if exists {
+		return enc, nil
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Check again in case another goroutine created it
+	if enc, exists = h.encryptors[userID]; exists {
+		return enc, nil
+	}
+
+	// Get user's encryption key
+	var encryptedKey string
+	err := h.db.QueryRow("SELECT encryption_key FROM users WHERE id = ?", userID).Scan(&encryptedKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decode the base64 key back to bytes
+	keyBytes, err := base64.StdEncoding.DecodeString(encryptedKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode encryption key: %v", err)
+	}
+
+	enc, err = crypto.NewEncryptor(string(keyBytes))
+	if err != nil {
+		return nil, err
+	}
+
+	h.encryptors[userID] = enc
+	return enc, nil
 }
 
 // Register godoc
@@ -73,15 +122,22 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
+	encryptionKey := make([]byte, 32)
+	if _, err := rand.Read(encryptionKey); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate encryption key"})
+		return
+	}
+
 	user := models.User{
-		ID:       utils.GenerateUUID(),
-		Email:    request.Email,
-		Password: string(hashedPassword),
+		ID:            utils.GenerateUUID(),
+		Email:         request.Email,
+		Password:      string(hashedPassword),
+		EncryptionKey: base64.StdEncoding.EncodeToString(encryptionKey),
 	}
 
 	// Insert user
-	query := `INSERT INTO users (id, email, password) VALUES (?, ?, ?)`
-	_, err = h.db.Exec(query, user.ID, user.Email, string(hashedPassword))
+	query := `INSERT INTO users (id, email, password, encryption_key) VALUES (?, ?, ?, ?)`
+	_, err = h.db.Exec(query, user.ID, user.Email, user.Password, user.EncryptionKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
@@ -104,7 +160,6 @@ func (h *Handler) Register(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "User registered successfully",
-		"user":    user,
 	})
 }
 
@@ -474,6 +529,13 @@ func (h *Handler) HandleLog(c *gin.Context) {
 		return
 	}
 
+	// Get encryptor for the logger's user
+	encryptor, err := h.getEncryptor(logger.UserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Encryption error"})
+		return
+	}
+
 	// Read request body
 	var bodyBytes []byte
 	if c.Request.Body != nil {
@@ -486,29 +548,45 @@ func (h *Handler) HandleLog(c *gin.Context) {
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 	}
 
+	// Encrypt headers
+	encryptedHeaders, err := encryptor.Encrypt(getHeadersAsJSON(c.Request.Header))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to encrypt headers"})
+		return
+	}
+
 	// Create log entry
 	logEntry := models.LogEntry{
 		ID:       utils.GenerateUUID(),
 		LoggerID: logger.ID,
 		Method:   c.Request.Method,
 		Path:     path,
-		Headers:  getHeadersAsJSON(c.Request.Header),
+		Headers:  encryptedHeaders,
 		Query:    c.Request.URL.RawQuery,
 	}
 
-	// Store body if present
+	// Process and encrypt body if present
 	if len(bodyBytes) > 0 {
+		var bodyToEncrypt string
 		// Try to pretty-print JSON body
-		var prettyJSON bytes.Buffer
 		if json.Valid(bodyBytes) {
+			var prettyJSON bytes.Buffer
 			if err := json.Indent(&prettyJSON, bodyBytes, "", "  "); err == nil {
-				logEntry.Body = prettyJSON.String()
+				bodyToEncrypt = prettyJSON.String()
 			} else {
-				logEntry.Body = string(bodyBytes)
+				bodyToEncrypt = string(bodyBytes)
 			}
 		} else {
-			logEntry.Body = string(bodyBytes)
+			bodyToEncrypt = string(bodyBytes)
 		}
+
+		// Encrypt the body
+		encryptedBody, err := encryptor.Encrypt(bodyToEncrypt)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to encrypt body"})
+			return
+		}
+		logEntry.Body = encryptedBody
 	}
 
 	// Store the log entry
@@ -539,7 +617,6 @@ func (h *Handler) HandleLog(c *gin.Context) {
 		log.Printf("Error checking repeaters: %v", err)
 	} else {
 		defer rows.Close()
-
 		for rows.Next() {
 			var repeater models.Repeater
 			err := rows.Scan(
@@ -557,7 +634,7 @@ func (h *Handler) HandleLog(c *gin.Context) {
 		}
 	}
 
-	// Prepare response
+	// Prepare response (using original, unencrypted data for response)
 	response := gin.H{
 		"id":        logEntry.ID,
 		"timestamp": time.Now().UTC(),
@@ -566,18 +643,23 @@ func (h *Handler) HandleLog(c *gin.Context) {
 		"query":     logEntry.Query,
 	}
 
-	// Parse headers for response
+	// Add original headers to response
 	var headers map[string]string
-	json.Unmarshal([]byte(logEntry.Headers), &headers)
+	headersJSON := getHeadersAsJSON(c.Request.Header)
+	json.Unmarshal([]byte(headersJSON), &headers)
 	response["headers"] = headers
 
-	// Add body to response if present
-	if logEntry.Body != "" {
-		var jsonBody interface{}
-		if err := json.Unmarshal([]byte(logEntry.Body), &jsonBody); err == nil {
-			response["body"] = jsonBody
+	// Add original body to response
+	if len(bodyBytes) > 0 {
+		if json.Valid(bodyBytes) {
+			var jsonBody interface{}
+			if err := json.Unmarshal(bodyBytes, &jsonBody); err == nil {
+				response["body"] = jsonBody
+			} else {
+				response["body"] = string(bodyBytes)
+			}
 		} else {
-			response["body"] = logEntry.Body
+			response["body"] = string(bodyBytes)
 		}
 	}
 
@@ -760,6 +842,13 @@ func (h *Handler) GetLogDetail(c *gin.Context) {
 	loggerUUID := c.Param("logger_uuid")
 	requestUUID := c.Param("request_uuid")
 
+	// Get encryptor for the user
+	encryptor, err := h.getEncryptor(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Encryption error"})
+		return
+	}
+
 	// Verify logger ownership and get log details
 	var logDetail struct {
 		Method    string
@@ -770,7 +859,7 @@ func (h *Handler) GetLogDetail(c *gin.Context) {
 		CreatedAt time.Time
 	}
 
-	err := h.db.QueryRow(`
+	err = h.db.QueryRow(`
         SELECT le.method, le.path, le.headers, le.query, le.body, le.created_at
         FROM log_entries le
         JOIN loggers l ON le.logger_id = l.id
@@ -783,7 +872,6 @@ func (h *Handler) GetLogDetail(c *gin.Context) {
 		&logDetail.Body,
 		&logDetail.CreatedAt,
 	)
-
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Log entry not found"})
 		return
@@ -792,16 +880,38 @@ func (h *Handler) GetLogDetail(c *gin.Context) {
 		return
 	}
 
-	// Parse headers
-	var headers map[string]string
-	json.Unmarshal([]byte(logDetail.Headers), &headers)
+	// Decrypt headers
+	decryptedHeaders, err := encryptor.Decrypt(logDetail.Headers)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt headers"})
+		return
+	}
 
-	// Parse body if it's JSON
-	var body interface{} = logDetail.Body
+	// Parse decrypted headers
+	var headers map[string]string
+	if err := json.Unmarshal([]byte(decryptedHeaders), &headers); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse headers"})
+		return
+	}
+
+	// Initialize body as interface
+	var body interface{} = nil
+
+	// Decrypt and parse body if present
 	if logDetail.Body != "" {
+		decryptedBody, err := encryptor.Decrypt(logDetail.Body)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt body"})
+			return
+		}
+
+		// Try to parse as JSON first
 		var jsonBody interface{}
-		if err := json.Unmarshal([]byte(logDetail.Body), &jsonBody); err == nil {
+		if err := json.Unmarshal([]byte(decryptedBody), &jsonBody); err == nil {
 			body = jsonBody
+		} else {
+			// If not JSON, use as string
+			body = decryptedBody
 		}
 	}
 
