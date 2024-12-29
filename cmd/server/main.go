@@ -4,14 +4,15 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 	_ "reqi-api/docs" // Required for Swagger
 	"reqi-api/internal/api"
 	"reqi-api/internal/auth"
 	"reqi-api/internal/config"
 	"reqi-api/internal/ratelimit"
 	"reqi-api/internal/storage"
+
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 // cmd/server/main.go
@@ -39,7 +40,13 @@ import (
 // @in                         header
 // @name                       Authorization
 func main() {
+
+	gin.SetMode(gin.ReleaseMode)
 	// Load configuration from .env
+	if err := godotenv.Load(); err != nil {
+		log.Printf("No .env file found, using system environment variables")
+	}
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
@@ -82,35 +89,20 @@ func main() {
 	}
 	defer db.Close()
 
-	// Set up migrations
-	projectRoot, err := findProjectRoot()
-	if err != nil {
-		log.Fatalf("Failed to find project root: %v", err)
-	}
-
-	migrationsPath := filepath.Join(projectRoot, "migrations")
-	if _, err := os.Stat(migrationsPath); os.IsNotExist(err) {
-		log.Fatalf("Migrations directory does not exist: %s", migrationsPath)
-	}
-
-	if cfg.Env == "development" {
-		log.Printf("Using migrations from: %s", migrationsPath)
-	}
-
-	if err := storage.RunMigrations(db, migrationsPath); err != nil {
+	if err := storage.RunMigrations(db); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
 	rateLimiter, err := ratelimit.NewRateLimiter(cfg.Redis.URL)
-    if err != nil {
-        log.Fatalf("Failed to initialize rate limiter: %v", err)
-    }
-    defer rateLimiter.Close()
+	if err != nil {
+		log.Fatalf("Failed to initialize rate limiter: %v", err)
+	}
+	defer rateLimiter.Close()
 
 	// Set up and start the server
 	router := api.SetupRouter(db, rateLimiter)
 
-serverAddr := fmt.Sprintf(":%s", cfg.Server.Port)
+	serverAddr := fmt.Sprintf(":%s", cfg.Server.Port)
 	if cfg.Env == "development" {
 		log.Printf("Server starting on http://localhost%s", serverAddr)
 		log.Printf("Swagger UI available at http://localhost%s/swagger/index.html", serverAddr)
@@ -118,26 +110,5 @@ serverAddr := fmt.Sprintf(":%s", cfg.Server.Port)
 
 	if err := router.Run(serverAddr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
-	}
-}
-
-// findProjectRoot looks for the go.mod file to determine the project root
-func findProjectRoot() (string, error) {
-	currentDir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-
-	dir := currentDir
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, nil
-		}
-
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("could not find project root (no go.mod found)")
-		}
-		dir = parent
 	}
 }
