@@ -23,7 +23,10 @@ import (
 // @Param fromDate query string false "Filter by date from (RFC3339 format)"
 // @Param toDate query string false "Filter by date to (RFC3339 format)"
 // @Success 200 {object} models.LogSearchResponse
-// @Failure 400 {object} models.ErrorResponse "Invalid request parameters"
+// @Failure 400 {object} object{error=string}
+// @Failure 401 {object} object{error=string}
+// @Failure 404 {object} object{error=string}
+// @Failure 500 {object} object{error=string}
 // @Router /api/logs/search [get]
 func (h *Handler) SearchLogs(c *gin.Context) {
 	userID := c.GetString("user_id")
