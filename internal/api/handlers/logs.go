@@ -18,145 +18,76 @@ import (
 )
 
 func (h *Handler) forwardRequest(repeater models.Repeater, originalReq *http.Request, logID string) {
-    // Check rate limit first
-    allowed, _, err := h.rateLimiter.Allow("global:repeater", constants.GlobalRepeaterLimit, time.Minute)
-    if err != nil {
-        log.Printf("Rate limit check failed for repeater: %v", err)
-        return
-    }
-    if !allowed {
-        log.Printf("Rate limit exceeded for repeater")
-        return
-    }
-
-    // Create new request
-    body, err := io.ReadAll(originalReq.Body)
-    if err != nil {
-        log.Printf("Error reading request body for forwarding: %v", err)
-        return
-    }
-    originalReq.Body = io.NopCloser(bytes.NewBuffer(body))
-
-    // Create forwarding request
-    req, err := http.NewRequest(
-        originalReq.Method,
-        repeater.ForwardURL,
-        bytes.NewBuffer(body),
-    )
-    if err != nil {
-        log.Printf("Error creating forward request: %v", err)
-        return
-    }
-
-    // Copy headers
-    for key, values := range originalReq.Header {
-        if key != "Host" || repeater.PreserveHost {
-            for _, value := range values {
-                req.Header.Add(key, value)
-            }
-        }
-    }
-
-    // Add custom headers
-    req.Header.Set("X-Reqi-Request-ID", logID)
-    req.Header.Set("X-Reqi-Forwarded", "true")
-
-    // Create client with timeout
-    client := &http.Client{
-        Timeout: time.Duration(repeater.Timeout) * time.Second,
-    }
-
-    // Attempt forwarding with retries
-    var lastErr error
-    for i := 0; i <= repeater.RetryCount; i++ {
-        resp, err := client.Do(req)
-        if err != nil {
-            lastErr = err
-            time.Sleep(time.Second * time.Duration(i+1)) // Exponential backoff
-            continue
-        }
-        resp.Body.Close()
-        
-        if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-            log.Printf("Successfully forwarded request to %s", repeater.ForwardURL)
-            return
-        }
-        
-        lastErr = fmt.Errorf("received status code: %d", resp.StatusCode)
-        time.Sleep(time.Second * time.Duration(i+1))
-    }
-
-    log.Printf("Failed to forward request after %d attempts: %v", 
-        repeater.RetryCount+1, lastErr)
-}
-
-// Log godoc
-// @Summary Log a request (Deprecated)
-// @Description Legacy endpoint for logging requests (use HandleLog instead)
-// @Tags logs
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param request body object{uuid=string,body=string} true "Log details"
-// @Success 200 {object} object{message=string,log=object}
-// @Failure 401 {object} object{error=string}
-// @Failure 500 {object} object{error=string}
-// @Router /api/log [post]
-func (h *Handler) Log(c *gin.Context) {
-	apiKeyHeader := c.GetHeader("X-API-Key")
-	if apiKeyHeader == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "API key required"})
-		return
-	}
-
-	// Verify API key
-	var apiKey models.APIKey
-	err := h.db.QueryRow("SELECT id, is_public FROM api_keys WHERE api_key = ?", apiKeyHeader).
-		Scan(&apiKey.ID, &apiKey.IsPublic)
-	if err == sql.ErrNoRows {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
-		return
-	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
-		return
-	}
-
-	var log models.Log
-	if err := c.ShouldBindJSON(&log); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	log.ID = utils.GenerateUUID()
-	log.APIKeyID = apiKey.ID
-
-	query := `INSERT INTO logs (id, api_key_id, uuid, body) VALUES (?, ?, ?, ?)`
-	_, err = h.db.Exec(query, log.ID, log.APIKeyID, log.UUID, log.Body)
+	// Check rate limit first
+	allowed, _, err := h.rateLimiter.Allow("global:repeater", constants.GlobalRepeaterLimit, time.Minute)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create log"})
+		log.Printf("Rate limit check failed for repeater: %v", err)
+		return
+	}
+	if !allowed {
+		log.Printf("Rate limit exceeded for repeater")
 		return
 	}
 
-	// Fetch the complete log record including timestamp
-	err = h.db.QueryRow(`
-        SELECT id, api_key_id, uuid, body, created_at 
-        FROM logs 
-        WHERE id = ?`, log.ID).Scan(
-		&log.ID,
-		&log.APIKeyID,
-		&log.UUID,
-		&log.Body,
-		&log.CreatedAt,
+	// Create new request
+	body, err := io.ReadAll(originalReq.Body)
+	if err != nil {
+		log.Printf("Error reading request body for forwarding: %v", err)
+		return
+	}
+	originalReq.Body = io.NopCloser(bytes.NewBuffer(body))
+
+	// Create forwarding request
+	req, err := http.NewRequest(
+		originalReq.Method,
+		repeater.ForwardURL,
+		bytes.NewBuffer(body),
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch log details"})
+		log.Printf("Error creating forward request: %v", err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Log created successfully",
-		"log":     log,
-	})
+	// Copy headers
+	for key, values := range originalReq.Header {
+		if key != "Host" || repeater.PreserveHost {
+			for _, value := range values {
+				req.Header.Add(key, value)
+			}
+		}
+	}
+
+	// Add custom headers
+	req.Header.Set("X-Reqi-Request-ID", logID)
+	req.Header.Set("X-Reqi-Forwarded", "true")
+
+	// Create client with timeout
+	client := &http.Client{
+		Timeout: time.Duration(repeater.Timeout) * time.Second,
+	}
+
+	// Attempt forwarding with retries
+	var lastErr error
+	for i := 0; i <= repeater.RetryCount; i++ {
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			time.Sleep(time.Second * time.Duration(i+1)) // Exponential backoff
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			log.Printf("Successfully forwarded request to %s", repeater.ForwardURL)
+			return
+		}
+
+		lastErr = fmt.Errorf("received status code: %d", resp.StatusCode)
+		time.Sleep(time.Second * time.Duration(i+1))
+	}
+
+	log.Printf("Failed to forward request after %d attempts: %v",
+		repeater.RetryCount+1, lastErr)
 }
 
 func getHeadersAsJSON(headers http.Header) string {
