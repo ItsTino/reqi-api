@@ -11,6 +11,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// @Summary Search logs
+// @Description Search and filter log entries with pagination
+// @Tags logs
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number (starts from 1)" default(1)
+// @Param pageSize query int false "Number of items per page" default(10)
+// @Param method query string false "Filter by HTTP method"
+// @Param path query string false "Filter by request path"
+// @Param fromDate query string false "Filter by date from (RFC3339 format)"
+// @Param toDate query string false "Filter by date to (RFC3339 format)"
+// @Success 200 {object} models.LogSearchResponse
+// @Failure 400 {object} models.ErrorResponse "Invalid request parameters"
+// @Router /api/logs/search [get]
 func (h *Handler) SearchLogs(c *gin.Context) {
 	userID := c.GetString("user_id")
 	var req models.LogSearchRequest
