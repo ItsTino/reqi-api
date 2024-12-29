@@ -14,16 +14,18 @@ import (
 )
 
 func SetupRouter(db *sql.DB, rateLimiter *ratelimit.RateLimiter) *gin.Engine {
-    router := gin.Default()
-    h := handlers.NewHandler(db, rateLimiter)  // Pass the rate limiter instance
-    
-    router.Use(func(c *gin.Context) {
-        c.Set("db", db)
-        c.Next()
-    })
+	router := gin.Default()
+	h := handlers.NewHandler(db, rateLimiter) // Pass the rate limiter instance
+
+	router.Use(func(c *gin.Context) {
+		c.Set("db", db)
+		c.Next()
+	})
 
 	//Swagger Route
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	router.GET("/", h.Home)
 
 	// Auth routes
 	auth := router.Group("/auth")
@@ -43,35 +45,35 @@ func SetupRouter(db *sql.DB, rateLimiter *ratelimit.RateLimiter) *gin.Engine {
 		keys.DELETE("/:key", h.RevokeAPIKey)
 	}
 
-    api := router.Group("/api")
-    api.Use(APIKeyMiddleware())
-    {
-        // Logger management endpoints
-        api.Use(middleware.ConfigurableRateLimit(rateLimiter, "logger_ops", 0, time.Minute))
-        {
-            api.POST("/logger", h.CreateLogger)
-            api.GET("/loggers", h.ListLoggers)
-            api.GET("/logs/:uuid", h.ShowAllLogs)
-            api.GET("/log/:logger_uuid/:request_uuid", h.GetLogDetail)
-            api.POST("/search/logs", h.SearchLogs)
-        }
+	api := router.Group("/api")
+	api.Use(APIKeyMiddleware())
+	{
+		// Logger management endpoints
+		api.Use(middleware.ConfigurableRateLimit(rateLimiter, "logger_ops", 0, time.Minute))
+		{
+			api.POST("/logger", h.CreateLogger)
+			api.GET("/loggers", h.ListLoggers)
+			api.GET("/logs/:uuid", h.ShowAllLogs)
+			api.GET("/log/:logger_uuid/:request_uuid", h.GetLogDetail)
+			api.POST("/search/logs", h.SearchLogs)
+		}
 
-        // Repeater endpoints with specific rate limit
-        repeater := api.Group("")
-        repeater.Use(middleware.RepeaterRateLimit(rateLimiter))
-        {
-            repeater.POST("/logger/:logger_uuid/repeater", h.CreateRepeater)
-            repeater.GET("/logger/:logger_uuid/repeaters", h.ListRepeaters)
-            repeater.DELETE("/repeater/:id", h.DeleteRepeater)
-            repeater.PUT("/repeater/:id", h.UpdateRepeater)
-        }
-    }
+		// Repeater endpoints with specific rate limit
+		repeater := api.Group("")
+		repeater.Use(middleware.RepeaterRateLimit(rateLimiter))
+		{
+			repeater.POST("/logger/:logger_uuid/repeater", h.CreateRepeater)
+			repeater.GET("/logger/:logger_uuid/repeaters", h.ListRepeaters)
+			repeater.DELETE("/repeater/:id", h.DeleteRepeater)
+			repeater.PUT("/repeater/:id", h.UpdateRepeater)
+		}
+	}
 
 	// Public logging endpoint (no auth required for public loggers)
-    router.Any("/log/:uuid/*path", 
-        middleware.PublicRateLimit(rateLimiter),
-        h.HandleLog,
-    )
+	router.Any("/log/:uuid/*path",
+		middleware.PublicRateLimit(rateLimiter),
+		h.HandleLog,
+	)
 
 	return router
 }
