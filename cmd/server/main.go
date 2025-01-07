@@ -3,7 +3,9 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
+	"os"
 	_ "reqi-api/docs" // Required for Swagger
 	"reqi-api/internal/api"
 	"reqi-api/internal/auth"
@@ -20,16 +22,7 @@ import (
 // @title           Reqi API
 // @version         1.0
 // @description     API for capturing and managing webhook requests and callbacks
-// @termsOfService  http://swagger.io/terms/
 
-// @contact.name   API Support
-// @contact.url    http://www.swagger.io/support
-// @contact.email  support@swagger.io
-
-// @license.name  Apache 2.0
-// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
-
-// @host      localhost:8080
 // @BasePath  /
 
 // @securityDefinitions.apikey  ApiKeyAuth
@@ -42,6 +35,10 @@ import (
 func main() {
 
 	gin.SetMode(gin.ReleaseMode)
+
+	f, _ := os.Create("gin.log")
+	gin.DefaultWriter = io.MultiWriter(f, os.Stdout)
+
 	// Load configuration from .env
 	if err := godotenv.Load(); err != nil {
 		log.Printf("No .env file found, using system environment variables")

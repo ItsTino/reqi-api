@@ -13,9 +13,9 @@ import (
 
 // @Summary Search logs
 // @Description Search and filter log entries with pagination
-// @Tags logs
-// @Accept json
+// @Tags search
 // @Produce json
+// @Security ApiKeyAuth
 // @Param page query int false "Page number (starts from 1)" default(1)
 // @Param pageSize query int false "Number of items per page" default(10)
 // @Param method query string false "Filter by HTTP method"
