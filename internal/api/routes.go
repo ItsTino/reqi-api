@@ -69,6 +69,16 @@ func SetupRouter(db *sql.DB, rateLimiter *ratelimit.RateLimiter) *gin.Engine {
 		}
 	}
 
+	teams := router.Group("/teams")
+	teams.Use(middleware.AuthMiddleware())
+	{
+		teams.POST("/create", h.CreateTeam)
+		teams.POST("/invite", h.InviteToTeam)
+		teams.POST("/accept", h.AcceptInvite)
+		teams.GET("/my-team", h.GetMyTeam)
+		teams.DELETE("/leave", h.LeaveTeam) // New endpoint to leave team
+	}
+
 	// Public logging endpoint (no auth required for public loggers)
 	router.Any("/log/:uuid/*path",
 		middleware.PublicRateLimit(rateLimiter),
