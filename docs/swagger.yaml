@@ -1,66 +1,44 @@
 basePath: /
-host: localhost:8080
+definitions:
+  models.LogDetail:
+    properties:
+      body: {}
+      created_at:
+        type: string
+      headers:
+        additionalProperties:
+          type: string
+        type: object
+      method:
+        type: string
+      path:
+        type: string
+      query:
+        type: string
+      uuid:
+        type: string
+    type: object
+  models.LogSearchResponse:
+    properties:
+      current_page:
+        type: integer
+      has_more:
+        type: boolean
+      logs:
+        items:
+          $ref: '#/definitions/models.LogDetail'
+        type: array
+      page_count:
+        type: integer
+      total:
+        type: integer
+    type: object
 info:
-  contact:
-    email: support@swagger.io
-    name: API Support
-    url: http://www.swagger.io/support
+  contact: {}
   description: API for capturing and managing webhook requests and callbacks
-  license:
-    name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
-  termsOfService: http://swagger.io/terms/
   title: Reqi API
   version: "1.0"
 paths:
-  /api/log:
-    post:
-      consumes:
-      - application/json
-      description: Legacy endpoint for logging requests (use HandleLog instead)
-      parameters:
-      - description: Log details
-        in: body
-        name: request
-        required: true
-        schema:
-          properties:
-            body:
-              type: string
-            uuid:
-              type: string
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            properties:
-              log:
-                type: object
-              message:
-                type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            properties:
-              error:
-                type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            properties:
-              error:
-                type: string
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Log a request (Deprecated)
-      tags:
-      - logs
   /api/log/{logger_uuid}/{request_uuid}:
     get:
       description: Get detailed information about a specific logged request
@@ -174,6 +152,68 @@ paths:
       summary: Create a new logger
       tags:
       - loggers
+  /api/logger/{logger_uuid}/repeaters:
+    get:
+      description: Get a list of all repeaters configured for a specific logger
+      parameters:
+      - description: Logger UUID
+        in: path
+        name: logger_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              repeaters:
+                items:
+                  properties:
+                    created_at:
+                      type: string
+                    forward_url:
+                      type: string
+                    id:
+                      type: string
+                    is_active:
+                      type: boolean
+                    preserve_host:
+                      type: boolean
+                    retry_count:
+                      type: integer
+                    timeout:
+                      type: integer
+                  type: object
+                type: array
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List all repeaters for a logger
+      tags:
+      - repeaters
   /api/loggers:
     get:
       description: Get a list of all loggers for the authenticated user
@@ -260,6 +300,76 @@ paths:
       summary: Show all logs for a logger
       tags:
       - logs
+  /api/logs/search:
+    get:
+      description: Search and filter log entries with pagination
+      parameters:
+      - default: 1
+        description: Page number (starts from 1)
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Number of items per page
+        in: query
+        name: pageSize
+        type: integer
+      - description: Filter by HTTP method
+        in: query
+        name: method
+        type: string
+      - description: Filter by request path
+        in: query
+        name: path
+        type: string
+      - description: Filter by date from (RFC3339 format)
+        in: query
+        name: fromDate
+        type: string
+      - description: Filter by date to (RFC3339 format)
+        in: query
+        name: toDate
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.LogSearchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Search logs
+      tags:
+      - search
   /api/register:
     post:
       consumes:
@@ -319,6 +429,123 @@ paths:
       summary: Register a new API key
       tags:
       - api-keys
+  /api/repeater/{id}:
+    delete:
+      description: Delete a configured repeater
+      parameters:
+      - description: Repeater ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              message:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a repeater
+      tags:
+      - repeaters
+    put:
+      consumes:
+      - application/json
+      description: Update a configured repeater's settings
+      parameters:
+      - description: Repeater ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Repeater settings
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            forward_url:
+              type: string
+            is_active:
+              type: boolean
+            preserve_host:
+              type: boolean
+            retry_count:
+              type: integer
+            timeout:
+              type: integer
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              message:
+                type: string
+              repeater:
+                type: object
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update a repeater
+      tags:
+      - repeaters
   /auth/login:
     post:
       consumes:
